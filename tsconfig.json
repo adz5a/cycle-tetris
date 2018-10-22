@@ -1,6 +1,10 @@
 {
-    "strict": true,
-    "noUnusedLocals": true,
-    "target": "es6",
-    "sourceMap": true
+    "compilerOptions": {
+        "strict": true,
+        "strictFunctionTypes": false,
+        "noUnusedLocals": true,
+        "target": "es6",
+        "sourceMap": true,
+        "moduleResolution": "node"
+    }
 }
