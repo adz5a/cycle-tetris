@@ -3,115 +3,121 @@ import { run } from "@cycle/run";
 import {
     makeDOMDriver,
     DOMSource,
-    div,
     VNode,
-    button,
+    svg,
+    div,
+    label,
+    option,
+    select,
     span
 } from "@cycle/dom";
 import {
-    withState,
+    Reducer,
     StateSource,
-    Reducer
+    withState
 } from "@cycle/state";
+import {
+    coordinate,
+    Pieces,
+    makePiece,
+} from "./pieces";
 
 
 const root = document.getElementById("app") as any as HTMLElement;
 
-type Status = "paused" | "active";
-
-interface State<S extends Status> {
-    status: S;
-    count: number;
-}
-
 interface ISource {
     DOM: DOMSource;
-    state: StateSource<State<Status>>;
+    state: StateSource<IState>
 }
 
 interface ISink {
     DOM: Stream<VNode>;
-    state: Stream<Reducer<State<Status>>>;
+    state: Stream<Reducer<IState>>;
 }
 
-const defaultState: State<"paused"> = {
-    status: "paused",
-    count: 0
+interface IState<K extends keyof Pieces = keyof Pieces> {
+    currentPiece: K;
+    repr: coordinate[] | Pieces[K];
+    position: coordinate;
+}
+
+const pieces: Pieces = {
+    I: [ [-1,  0], [ 0,  0], [ 1,  0], [ 2,  0] ],
+    T: [ [ 0, -1], [-1,  0], [ 0,  0], [ 1,  0] ],
+    O: [ [ 0, -1], [ 1, -1], [ 0,  0], [ 1,  0] ],
+    J: [ [-1, -1], [-1,  0], [ 0,  0], [ 1,  0] ],
+    L: [ [ 1, -1], [-1,  0], [ 0,  0], [ 1,  0] ],
+    S: [ [ 0, -1], [ 1, -1], [-1,  0], [ 0,  0] ],
+    Z: [ [-1, -1], [ 0, -1], [ 0,  0], [ 1,  0] ]
 };
 
-const increaseCounter = (state: State<Status> = defaultState): State<Status> => {
-    return {
-        ...state,
-        count: state.count + 1,
-    };
+const piecesName = Object.keys(pieces) as Array<keyof Pieces>;
+
+const defaultState: IState<"I"> = {
+    currentPiece: "I",
+    repr: pieces["I"],
+    position: [20, 20]
 };
 
-const toggleState = (state: State<Status> = defaultState): State<Status> => {
+const initReducer: Reducer<IState<"I">> = (state = defaultState) => {
 
-    if (state.status === "active") {
-        return {
-            ...state,
-            status: "paused"
-        };
-    }
-    return {
-        ...state,
-        status: "active"
-    };
+    return defaultState;
+
 };
 
 const main = (sources: ISource): ISink => {
 
-    const click$ = sources.DOM.select(".inc")
-        .events("click");
+    const repr$ = sources.state.stream
+        .map(({ repr, position }) => makePiece(repr, position));
 
-    const status$ = sources.state.stream
-        .map((state) => state.status);
-
-    const count$ = sources.state.stream
-        .map((state) => state.count);
-
-    const tick$: Stream<any> = status$
-        .fold((stream, status) => {
-
-            if (status === "paused") {
-                return xs.never();
+    const board$ = repr$
+        .debug("REPR")
+        .map((repr) => svg({
+            attrs: {
+                width: 400,
+                height: 700
+            },
+            style: {
+                border: "solid"
             }
-            return xs.periodic(1000);
+        },
+            repr));
 
-        }, xs.never())
-        .flatten();
-
-    const counter$ = count$
-        .map((count) => {
-            return div([
-                "Count",
-                span(".counter", {
+    const controls$ = sources.state.stream
+        .map((state) => div([
+            label([
+                span({
                     style: {
                         padding: "1rem"
                     }
-                }, [count])
+                }, ["Choose a piece"]),
+                select(".piece", 
+                    {
+                        value: state.currentPiece
+                    },
+                    piecesName.map((K) => {
+                        return option([K]);
+                    }))
+            ])
+        ]));
+
+    const view$ = xs.combine(
+        controls$,
+        board$
+    )
+        .map(([controls, board]) => {
+
+            return div([
+                board,
+                controls
             ]);
+
         });
 
-    const inc$ = tick$.mapTo(increaseCounter);
-
-    const toggleStatus$ = click$.mapTo(toggleState);
-
-    const button$ = status$.map((status) => button(".inc", [status]));
-    const dom$ = xs
-        .combine(counter$, button$)
-        .map(([counterEl, buttonEl]) => {
-            return div([counterEl, buttonEl]);
-        });
 
     return {
-        DOM: dom$,
-        state: xs.merge(
-            xs.of(toggleState), // will start the app
-            inc$,
-            toggleStatus$
-        )
+        DOM: view$,
+        state: xs.of(initReducer)
     };
 };
 
