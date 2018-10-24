@@ -11,6 +11,7 @@ export type Pieces = {
     Z: [ [-1, -1], [ 0, -1], [ 0,  0], [ 1,  0] ]
 };
 
+export type PieceName = keyof Pieces;
 
 /**
  * Each element of a given piece is represented by a 10 * 10 square.

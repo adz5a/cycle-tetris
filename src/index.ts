@@ -19,6 +19,7 @@ import {
 import {
     coordinate,
     Pieces,
+    PieceName,
     makePiece,
 } from "./pieces";
 
@@ -35,7 +36,7 @@ interface ISink {
     state: Stream<Reducer<IState>>;
 }
 
-interface IState<K extends keyof Pieces = keyof Pieces> {
+interface IState<K extends PieceName = PieceName> {
     currentPiece: K;
     repr: coordinate[] | Pieces[K];
     position: coordinate;
@@ -51,7 +52,7 @@ const pieces: Pieces = {
     Z: [ [-1, -1], [ 0, -1], [ 0,  0], [ 1,  0] ]
 };
 
-const piecesName = Object.keys(pieces) as Array<keyof Pieces>;
+const piecesName = Object.keys(pieces) as Array<PieceName>;
 
 const defaultState: IState<"I"> = {
     currentPiece: "I",
@@ -96,7 +97,7 @@ const main = (sources: ISource): ISink => {
                         value: state.currentPiece
                     },
                     piecesName.map((K) => {
-                        return option([K]);
+                        return option({ value: K }, [K]);
                     }))
             ])
         ]));
@@ -114,10 +115,33 @@ const main = (sources: ISource): ISink => {
 
         });
 
+    const change$ = sources.DOM.select("select.piece")
+        .events("change");
+
+    const newPiece$ = change$
+        .map((e: Event) => (e.target as any).value as any as PieceName);
+
+    const changePiece$ = newPiece$
+        .map(newPiece => {
+            const changePiece: Reducer<IState> = (prevState: IState) => {
+                return {
+                    ...prevState,
+                    currentPiece: newPiece,
+                    repr: pieces[newPiece]
+                };
+            }; 
+
+            return changePiece;
+        });
+
+    const reducer$ = xs.merge(
+        xs.of(initReducer),
+        changePiece$ 
+    );
 
     return {
         DOM: view$,
-        state: xs.of(initReducer)
+        state: reducer$
     };
 };
 
