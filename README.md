@@ -1,7 +1,8 @@
 # README
 
-## Step 3 - Lay the base for the game: Display pieces using svg
+## Step 4 - Add controls for the pieces
 
-In the game we will use SVG to display the different pieces. This step creates
-the "scene" on which we will display the game and allows the user to select
-which piece is displayed and let's him move it around.
+In this step we implement two new features :
+
+- Pieces can be chosen using a `select` toggle.
+- You can make the pieces move using the keyboard and the keys `q-w-e-a-s-d`.

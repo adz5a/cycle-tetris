@@ -22,13 +22,16 @@ import {
     PieceName,
     makePiece,
 } from "./pieces";
-
+import {
+    makeKeyboardDriver
+} from "./keyboardDriver";
 
 const root = document.getElementById("app") as any as HTMLElement;
 
 interface ISource {
     DOM: DOMSource;
-    state: StateSource<IState>
+    state: StateSource<IState>;
+    keyPress: Stream<KeyboardEvent>;
 }
 
 interface ISink {
@@ -38,7 +41,7 @@ interface ISink {
 
 interface IState<K extends PieceName = PieceName> {
     currentPiece: K;
-    repr: coordinate[] | Pieces[K];
+    repr: coordinate[];
     position: coordinate;
 }
 
@@ -57,22 +60,79 @@ const piecesName = Object.keys(pieces) as Array<PieceName>;
 const defaultState: IState<"I"> = {
     currentPiece: "I",
     repr: pieces["I"],
-    position: [20, 20]
+    position: [0, 0]
 };
 
-const initReducer: Reducer<IState<"I">> = (state = defaultState) => {
+const makeMoveReducer = ([x, y]: coordinate): Reducer<IState> => (state: IState) => {
 
-    return defaultState;
+    const [px, py] = state.position;
+    return {
+        ...state,
+        position: [px + x, py + y]
+    };
 
+};
+
+const moveRight = makeMoveReducer([1, 0]);
+const moveLeft = makeMoveReducer([-1, 0]);
+const moveUp = makeMoveReducer([0, -1]);
+const moveDown = makeMoveReducer([0, 1]);
+const moveAtStartPoint = makeMoveReducer([20, 20]);
+
+const initReducer: Reducer<IState> = (state = defaultState) => {
+
+    return moveAtStartPoint(defaultState);
+
+};
+
+const rotateLeft: Reducer<IState> = (state = defaultState) => {
+    return {
+        ...state,
+        repr: state.repr.map(([x, y]) => [y, -x] as coordinate)
+    };
+};
+
+const rotateRight: Reducer<IState> = (state: IState = defaultState) => {
+    return {
+        ...state,
+        repr: state.repr.map(([x, y]) => [y, x] as coordinate)
+    };
 };
 
 const main = (sources: ISource): ISink => {
 
+    const keyMoves$ = sources.keyPress
+        .map((e) => e.key)
+        .startWith("NONE");
+
+    const moveLeft$ = keyMoves$
+        .filter((key) => key === "a")
+        .mapTo(moveLeft);
+
+    const moveRight$ = keyMoves$
+        .filter((key) => key === "d")
+        .mapTo(moveRight);
+
+    const moveDown$ = keyMoves$
+        .filter((key) => key === "s")
+        .mapTo(moveDown);
+
+    const moveUp$ = keyMoves$
+        .filter((key) => key === "w")
+        .mapTo(moveUp);
+
+    const rotateLeft$ = keyMoves$
+        .filter((key) => key === "q")
+        .mapTo(rotateLeft);
+
+    const rotateRight$ = keyMoves$
+        .filter((key) => key === "e")
+        .mapTo(rotateRight);
+
     const repr$ = sources.state.stream
-        .map(({ repr, position }) => makePiece(repr, position));
+        .map(({ position, repr }) => makePiece(repr, position));
 
     const board$ = repr$
-        .debug("REPR")
         .map((repr) => svg({
             attrs: {
                 width: 400,
@@ -104,13 +164,15 @@ const main = (sources: ISource): ISink => {
 
     const view$ = xs.combine(
         controls$,
-        board$
+        board$,
+        keyMoves$.map((key) => div([key]))
     )
-        .map(([controls, board]) => {
+        .map(([controls, board, key]) => {
 
             return div([
                 board,
-                controls
+                controls,
+                key
             ]);
 
         });
@@ -124,11 +186,12 @@ const main = (sources: ISource): ISink => {
     const changePiece$ = newPiece$
         .map(newPiece => {
             const changePiece: Reducer<IState> = (prevState: IState) => {
-                return {
+                return moveAtStartPoint({
                     ...prevState,
                     currentPiece: newPiece,
-                    repr: pieces[newPiece]
-                };
+                    repr: pieces[newPiece],
+                    position: [0, 0]
+                });
             }; 
 
             return changePiece;
@@ -136,7 +199,13 @@ const main = (sources: ISource): ISink => {
 
     const reducer$ = xs.merge(
         xs.of(initReducer),
-        changePiece$ 
+        changePiece$,
+        moveUp$,
+        moveLeft$,
+        moveRight$,
+        moveDown$,
+        rotateLeft$,
+        rotateRight$
     );
 
     return {
@@ -146,5 +215,6 @@ const main = (sources: ISource): ISink => {
 };
 
 run(withState(main), {
-    DOM: makeDOMDriver(root)
+    DOM: makeDOMDriver(root),
+    keyPress: makeKeyboardDriver("keypress"),
 });
